@@ -1,36 +1,39 @@
-name: PHP Composer
-
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-
+on: push
+name: PhpUnit prueba de test
 jobs:
-  build:
-
+  phpunit:
     runs-on: ubuntu-latest
-
     steps:
-    - uses: actions/checkout@v2
+      - uses: actions/checkout@v1
+      # For YAML Actions, use v1 or later
+      - uses: pxgamer/phpunit-action@master
+        with:
+          # If there isn't a PHPUnit config, specify files or directories to test
+          command: test/CalculadoraTest.php
+          bootstrap: vendor/autoload.php
+          configuration: test/phpunit.xml
 
-    - name: Validate composer.json and composer.lock
-      run: composer validate --strict
+  push_to_registry:
+    needs: phpunit
+    if: always() && (needs.phpunit.result !='failure' )
+    name: Push Docker image to Docker Hub
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Check out the repo
+      
+        env:
+          DOCKER_USER: ${{secrets.DOCKER_USER}}
+          DOCKER_PASSWORD: ${{secrets.DOCKER_PASSWORD}}
+        run: |
+          docker login -u $DOCKER_USER -p $DOCKER_PASSWORD
+      - name: Build image
+        run: | 
+            docker build -t ${{secrets.DOCKER_USER}}/docker_1:${{github.sha}} .
+            docker build -t ${{secrets.DOCKER_USER}}/docker_1:latest .
+        
 
-    - name: Cache Composer packages
-      id: composer-cache
-      uses: actions/cache@v2
-      with:
-        path: vendor
-        key: ${{ runner.os }}-php-${{ hashFiles('**/composer.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-php-
-
-    - name: Install dependencies
-      run: composer install --prefer-dist --no-progress
-
-    # Add a test script to composer.json, for instance: "test": "vendor/bin/phpunit"
-    # Docs: https://getcomposer.org/doc/articles/scripts.md
-
-    # - name: Run test suite
-    #   run: composer run-script test
+      - name: Docker Push
+        run: | 
+            docker push ${{secrets.DOCKER_USER}}/docker_1:${{github.sha}}
+            docker push ${{secrets.DOCKER_USER}}/docker_1:latest
